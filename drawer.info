@@ -1,0 +1,5 @@
+; $Id:$
+name = Drawer Blocks
+description = "Creates collapsable blocks using the jquery drawer plugin."
+dependencies = jquery_update
+version = "5.x-1.0a1"

@@ -1,0 +1,12 @@
+<?php
+// $Id: $
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function drawer_uninstall() {
+  // Delete variables
+  db_query("DELETE FROM {variable} WHERE name LIKE 'drawer_%%'");
+}
+
+

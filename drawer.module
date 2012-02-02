@@ -1,0 +1,428 @@
+<?php
+// $Id: $
+
+
+/**
+ * Implementation of hook_block().
+ */
+function drawer_block($op = 'list', $delta = 0, $edit = array()) {
+
+  static $core_sent;
+  $path = drupal_get_path('module', 'drawer');
+  if (!$core_sent) {
+    drupal_add_js( $path."/js/jquery.jDrawer.js" );
+  }
+  drupal_add_css(drupal_get_path('module', 'drawer') .'/css/jDrawer.css');
+
+  switch ($op) {
+    case 'configure':
+      $form = array();
+      if ($delta == 0) {
+        $form['drawer_string'] = array(
+          '#type' => 'textfield',
+          '#title' => t('Block contents'),
+          '#size' => 60,
+          '#description' => t('This string will appear in the example block.'),
+          '#default_value' =>
+            variable_get('drawer_string',  t('Some example content.')),
+        );
+      }
+      return $form;
+    case 'save':
+      if ($delta == 0) {
+        variable_set('drawer_string', $edit['drawer_string']);
+      }
+      return;
+    case 'list':
+      for ($i=1; $i <= variable_get('drawer_blockcount', '1'); $i++) {
+        $temp = drawer_getblock(array('module' => 'drawer' , 'delta' => $i));
+        $blocks[$i]['info'] = $temp->subject .' (Drawer)';
+      }
+      return $blocks;
+    case 'view': default:
+      drupal_add_js(_drawer_getjsinit($delta), "inline");
+      $block['subject'] = 'Drawer '. $delta;
+      $block['content'] = drawer_contents($delta);
+      return $block;
+  }
+}
+
+function _drawer_getjsinit($delta) {
+  $var_name = 'drawer_'. $delta;
+
+	$speedvar = $var_name .'_speed';
+  $speed_value = variable_get($speedvar, 500);
+  $speedstr = 'speed: '. $speed_value .'';
+
+	$directionvar = $var_name .'_direction';
+  $direction_style = variable_get($directionvar, '');
+  if ($direction_style && ($direction_style != 'top')) {
+    $directionstr = ', direction: "'. $direction_style .'"';
+	}
+	else {
+    $directionstr = '';
+	}
+
+  $eventvar = $var_name .'_event';
+  $event_val = variable_get($eventvar, '');
+  if ($event_val && ($event_val != 'mouseover')) {
+    $eventstr = ', event: "'. $event_val .'"';
+  }
+  else {
+    $eventstr = '';
+  }
+
+  $stickyvar = $var_name .'_sticky';
+  $sticky_val = variable_get($stickyvar, 1);
+  if (!$sticky_val) {
+    $stickystr = ', sticky: false';
+  }
+  else {
+    $stickystr = '';
+  }
+
+  return "jQuery(function(){ jQuery('#drawer-block-". $delta ."').jDrawer({ ". $speedstr . $directionstr . $eventstr . $stickystr ." }); });";
+}
+
+/**
+ * Implemention of hook_menu().
+ */
+function drawer_menu($may_cache) {
+  if (!$may_cache) {
+  }
+  else {
+    $items[] = array(
+      'path' => 'admin/settings/drawer',
+      'title' => t('Drawer Blocks'),
+      'description' => t('Configure Drawer Blocks.'),
+      'callback' => 'drupal_get_form',
+      'callback arguments' => array('drawer_admin_settings'),
+      'access' => user_access('administer site configuration'),
+      'type' => MENU_NORMAL_ITEM,
+    );
+  }
+
+  return $items;
+}
+
+/**
+ * Settings form as implemented by hook_menu
+ */
+function drawer_admin_settings() {
+  $form['drawer_blockcount'] = array(
+    '#type' => 'select',
+    '#title' => t('Number of Drawer Blocks'),
+    '#description' => t('The total number of Drawer blocks to create.'),
+    '#default_value' => variable_get('drawer_blockcount', '1'),
+    '#options' => drupal_map_assoc(array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)),
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+ * Implemention of hook_form_alter().
+ */
+function drawer_form_alter($form_id, &$form) {
+  if ($form_id == 'block_admin_configure') {
+    $module = $form['module']['#value'];
+    if ($module == 'drawer') {
+      $delta = $form['delta']['#value'];
+      $var_name = $module .'_'. $delta;
+
+      $form['block_settings']['#weight'] = -1;
+      
+      $form['drawer'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Drawer settings'),
+        '#collapsible' => TRUE,
+        '#weight' => 0,
+      );
+
+      //generate the select list of all blocks from all modules
+      $options['None'] = 'None';
+      foreach (module_list() as $module) {
+        $module_blocks = module_invoke($module, 'block', 'list');
+        if ($module_blocks && $module != 'drawer') {
+          foreach ($module_blocks as $delta => $block) {
+            $options["$module-$delta"] = $module .": ". strip_tags($block['info']);
+          }
+        }
+      }
+  
+      $form['drawer']['blocks'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Blocks in This Drawer'),
+        '#collapsible' => TRUE,
+        '#weight' => 0,
+      );
+
+      $block1var = $var_name .'_block1';
+      $form['drawer']['blocks']['block1'] = array(
+        '#type' => 'select',
+        '#options' => $options,
+        '#width' => 30,
+        '#default_value' => variable_get($block1var, 'None'),
+      );
+
+      $block2var = $var_name .'_block2';
+      $form['drawer']['blocks']['block2'] = array(
+        '#type' => 'select',
+        '#options' => $options,
+        '#width' => 30,
+        '#default_value' => variable_get($block2var, 'None'),
+      );
+
+      $block3var = $var_name .'_block3';
+      $form['drawer']['blocks']['block3'] = array(
+        '#type' => 'select',
+        '#options' => $options,
+        '#width' => 30,
+        '#default_value' => variable_get($block3var, 'None'),
+      );
+
+      $block4var = $var_name .'_block4';
+      $form['drawer']['blocks']['block4'] = array(
+        '#type' => 'select',
+        '#options' => $options,
+        '#width' => 30,
+        '#default_value' => variable_get($block4var, 'None'),
+      );
+
+      $block5var = $var_name .'_block5';
+      $form['drawer']['blocks']['block5'] = array(
+        '#type' => 'select',
+        '#options' => $options,
+        '#width' => 30,
+        '#default_value' => variable_get($block5var, 'None'),
+      );
+
+			$directionvar = $var_name .'_direction';
+			$form['drawer']['direction'] = array (
+				'#type' => 'select',
+				'#title' => t('Direction'),
+				'#description' => t("Direction."),
+				'#options' => drupal_map_assoc(array('top', 'left')),
+        '#default_value' => variable_get($directionvar, 0),
+			);
+
+      $speedvar = $var_name .'_speed';
+      $form['drawer']['speed'] = array(
+        '#type' => 'select',
+        '#title' => t('Speed'),
+        '#description' => t("Speed."),
+        '#options' => drupal_map_assoc(array(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000)),
+        '#default_value' => variable_get($speedvar, 500),
+      );
+
+      $eventvar = $var_name .'_event';
+      $form['drawer']['event'] = array(
+        '#type' => 'select',
+        '#title' => t('Trigger Event'),
+        '#description' => t("Trigger Event."),
+        '#options' => drupal_map_assoc(array('mouseover', 'click')),
+        '#default_value' => variable_get($eventvar, 'mouseover'),
+      );
+
+      $stickyvar = $var_name .'_sticky';
+      $form['drawer']['sticky'] = array(
+       '#type' => 'checkbox',
+       '#title' => t('Sticky'),
+       '#default_value' => variable_get($stickyvar, 1),
+      );
+
+      $allclosedvar = $var_name .'_allclosed';
+      $form['drawer']['allclosed'] = array(
+       '#type' => 'checkbox',
+       '#title' => t('All Closed To Start'),
+       '#default_value' => variable_get($allclosedvar, 0),
+      );
+
+      $form['#submit']['drawer_save'] = array();
+      
+    }
+  }
+}
+
+function drawer_save($form_id, $form_values) {
+  
+  $var_name = $form_values['module'] .'_'. $form_values['delta'];
+	$directionvar = $var_name .'_direction';
+  if ($form_values['direction']) {
+	  variable_set($directionvar, $form_values['direction']);
+	}
+	else {
+	  variable_del($directionvar);
+	}
+
+	$speedvar = $var_name .'_speed';
+  if ($form_values['speed']) {
+	  variable_set($speedvar, $form_values['speed']);
+	}
+	else {
+	  variable_del($speedvar);
+	}
+
+  $eventvar = $var_name .'_event';
+  if ($form_values['event']) {
+    variable_set($eventvar, $form_values['event']);
+  }
+  else {
+    variable_del($eventvar);
+  }
+
+  $stickyvar = $var_name .'_sticky';
+  if ($form_values['sticky']) {
+    variable_set($stickyvar, $form_values['sticky']);
+  }
+  else {
+    variable_set($stickyvar, 0);
+  }
+
+  $allclosedvar = $var_name .'_allclosed';
+  if ($form_values['allclosed']) {
+    variable_set($allclosedvar, $form_values['allclosed']);
+  }
+  else {
+    variable_set($allclosedvar, 0);
+  }
+
+  $block1var = $var_name .'_block1';
+  if ($form_values['block1'] && ($form_values['block1'] != 'None')) {
+    variable_set($block1var, $form_values['block1']);
+  }
+  else {
+    variable_del($block1var);
+  }
+
+  $block2var = $var_name .'_block2';
+  if ($form_values['block2'] && ($form_values['block2'] != 'None')) {
+    variable_set($block2var, $form_values['block2']);
+  }
+  else {
+    variable_del($block2var);
+  }
+
+  $block3var = $var_name .'_block3';
+  if ($form_values['block3'] && ($form_values['block3'] != 'None')) {
+    variable_set($block3var, $form_values['block3']);
+  }
+  else {
+    variable_del($block3var);
+  }
+
+  $block4var = $var_name .'_block4';
+  if ($form_values['block4'] && ($form_values['block4'] != 'None')) {
+    variable_set($block4var, $form_values['block4']);
+  }
+  else {
+    variable_del($block4var);
+  }
+
+  $block5var = $var_name .'_block5';
+  if ($form_values['block5'] && ($form_values['block5'] != 'None')) {
+    variable_set($block5var, $form_values['block5']);
+  }
+  else {
+    variable_del($block5var);
+  }
+
+}
+
+
+/**
+ * A block content function.
+ */
+function drawer_contents($which_block) {
+  for ($i = 1; $i <= 5; $i++) {
+    $varname = "drawer_". $which_block ."_block". $i;
+    $varvalue = variable_get($varname, '');
+    if ($varvalue) {
+      list($module , $delta) = explode("-" , $varvalue);
+      $temp = drawer_getblock(array('module' => $module , 'delta' => $delta , 'override_title' => 0 , 'override_title_text' => ''));
+      if ($i == 1) {
+        $allclosedvar = "drawer_". $which_block .'_allclosed';
+        if (variable_get($allclosedvar, 0)) {
+          $drawer_blocks .="<li class='drawer-container-". $i ."'>";
+				}
+				else {
+          $drawer_blocks .= "<li class='drawer-container-". $i ." jDrawer-active'>";
+				}
+			}
+			else {
+        $drawer_blocks .="<li class='drawer-container-". $i ."'>";
+			}
+      $drawer_blocks .= $temp->content;
+      $drawer_blocks .= "</li>";
+    }
+  }
+	
+	
+	
+  if ($drawer_blocks) {
+//    $drawerblock = drawer_getblock(array('module' => 'drawer' , 'delta' => $which_block));
+    $drawerblocktitle = $drawerblock->subject;
+
+
+	$directionvar = 'drawer_'. $which_block .'_direction';
+  $direction_style = variable_get($directionvar, '');
+  if ($direction_style == 'top') {
+    $output .= "<div class='drawer-title-l'><div class='drawer-title-r'><div class='drawer-title'>". $drawerblocktitle ."</div></div></div>";
+	}
+
+
+
+    $output .= "<ul id='drawer-block-". $which_block ."'>";
+    $output .= $drawer_blocks;
+    $output .= "</ul>";
+  }
+  return $output;
+}
+
+/**
+ * in response to find the block html 
+ *
+ * @param[module]:module name
+ * @param[delta]
+ * @param[override_title]
+ * @param['override_title_text']
+ *
+ * @return $block array
+ */
+function drawer_getblock($conf) {
+  $block = (object) module_invoke($conf['module'], 'block', 'view', $conf['delta']);
+  
+  $block->module = $conf['module'];
+  $block->delta = $conf['delta'];
+  
+  $temp = db_fetch_array(db_query("SELECT title FROM {blocks} WHERE module = '". $conf['module'] ."' AND delta ='". $conf['delta'] ."'"));
+  if ($temp['title']) {
+    $block->subject = $temp['title'];
+  }
+  
+  if (!$block->subject) {
+    $temp = block_box_get( $conf['delta'] );
+    $block->subject = $temp['title'];
+  }
+
+  $result = db_query("SELECT pages, visibility FROM {blocks} WHERE module = '%s' AND delta = %d", $block->module, $block->delta);
+
+  $block = (object)array_merge((array)$block, (array)db_fetch_object($result));
+  if ($block->pages) {
+    if ($block->visibility < 2) {
+      $path = drupal_get_path_alias($_GET['q']);
+      $regexp = '/^('. preg_replace(array('/(\r\n?|\n)/', '/\\\\\*/', '/(^|\|)\\\\<front\\\\>($|\|)/'), array('|', '.*', '\1'. preg_quote(variable_get('site_frontpage', 'node'), '/') .'\2'), preg_quote($block->pages, '/')) .')$/';
+      $page_match = !($block->visibility xor preg_match($regexp, $path));
+    } 
+    else {
+      $page_match = drupal_eval($block->pages);
+    }
+  } 
+  else {
+    $page_match = TRUE;
+  }
+  if ($page_match) {
+    $output = $block;
+  }
+  return $output;
+}
